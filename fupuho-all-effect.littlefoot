@@ -1,0 +1,192 @@
+/*
+<metadata description="slic4live controller 4x4" details="slicd4live controller 4x4" target="Lightpad" tags="MIDI;Controller">
+    <groups>
+      <group name="colours" displayName="Colours" />
+    </groups>
+
+    <variables>
+      <variable name="channel" displayName="MIDI Channel" type="int" min="1" max="16" value="1" displayMode="stepper" tooltip="The MIDI channel that values are sent on" />
+      <!--
+      <variable name="toggleColourOn"  displayName="Toggle On Colour" group="colours" type="colour" value="0xff00ff00" />
+      <variable name="toggleColourOff"  displayName="Toggle Off Colour" group="colours" type="colour" value="0xff808080" />
+      <variable name="padColour"  displayName="Pad Colour" group="colours" type="colour" value="0xff0000ff" />
+      -->
+    </variables>
+</metadata>
+*/
+
+int buttonWidth, buttonSpacing;
+int gridSize, maxButtonIndex;
+int buttonTouchedIndex;
+int toggleStates[4]; // Array to store toggle states for the first column
+
+int touchdebug1, touchdebug2, touchdebug3;
+int mididebug1, mididebug2, mididebug3;
+
+//==============================================================================
+int getButtonOnColour (int buttonIndex)
+{
+    if (buttonIndex < 4) {
+        // Toggle buttons
+        return 0xff00ff00; // Green
+    } else {
+        // Pressure-sensitive pads
+        return 0xff0000ff; // Blue
+    }
+}
+
+int getButtonOffColour (int buttonIndex)
+{
+    if (buttonIndex < 4) {
+        // Toggle buttons
+        return 0xff808080; // Gray
+    } else {
+        // Pressure-sensitive pads
+        return 0xff000080; // Dark Blue
+    }
+}
+
+//==============================================================================
+int getTouchedButton (float x, float y)
+{
+    int gridSize = 4;
+    // 座標補正 → 15x15
+	  int xx = int (x * (0.95 / 2.0) * 15.0);
+    int yy = int (y * (0.95 / 2.0) * 15.0);
+
+
+    // Adjust for the 1-dot spacing between buttons
+    int buttonX = xx / gridSize;
+    int buttonY = yy / gridSize;
+
+    touchdebug1 = buttonX;
+    touchdebug2 = buttonY;
+
+    // Calculate the button index (0-15)
+    return buttonX + buttonY * 4;
+}
+
+//==============================================================================
+void drawButton (int x, int y, int colour)
+{
+  int w = buttonWidth;
+  blendGradientRect(colour, //fixme
+                    colour & 0xff202020,
+                    colour & 0xf0101010,
+                    colour & 0xff202020,
+                    x * (buttonWidth + 1), y * (buttonWidth + 1), w, w);
+}
+
+int getButtonX (int buttonIndex)
+{
+  return buttonIndex % gridSize;
+}
+
+int getButtonY (int buttonIndex)
+{
+  return buttonIndex / gridSize;
+}
+
+void drawButtons()
+{
+  for(int buttonIndex = 0; buttonIndex < maxButtonIndex; ++buttonIndex)
+  {
+    int colour;
+    if (buttonIndex < 4) {
+      // Toggle buttons
+      colour = toggleStates[buttonIndex] ? getButtonOnColour(buttonIndex) : getButtonOffColour(buttonIndex);
+    } else {
+      // Pressure-sensitive pads
+      colour = getButtonOffColour(buttonIndex);
+    }
+    drawButton (getButtonX(buttonIndex), getButtonY(buttonIndex), colour);
+  }
+}
+
+//==============================================================================
+void initialise()
+{
+  gridSize = 4;
+  maxButtonIndex = gridSize * gridSize;
+  buttonTouchedIndex = 0;
+
+  buttonWidth = 3; // 3x3 button size
+  buttonSpacing = 1; // 1-dot spacing
+
+  // Initialize toggle states to off
+  for (int i = 0; i < 4; ++i) {
+    toggleStates[i] = 0;
+  }
+
+	for (int i = 0; i < 32; ++i)
+        setLocalConfigActiveState (i, false, false);
+}
+
+//==============================================================================
+void repaint()
+{
+	clearDisplay();
+
+	if (isConnectedToHost())
+        drawButtons();
+        //debug
+        // drawNumber(touchdebug1, 0xffff0000, 0, 0);
+        // drawNumber(touchdebug2, 0xff00ff00, 0, 5);
+        // drawNumber(touchdebug3, 0xff0000ff, 0, 10);
+}
+
+//==============================================================================
+void touchStart (int touchIndex, float x, float y, float z, float vz)
+{
+  int touchedButton = getTouchedButton(x, y);
+  if (touchedButton >= 0) {
+    buttonTouchedIndex = touchIndex;
+    if (touchedButton < 4) {
+      // Toggle button
+      toggleStates[touchedButton] = 1 - toggleStates[touchedButton]; // Toggle state
+      sendCC((channel - 1), touchedButton + 20, toggleStates[touchedButton] * 127); // Send CC (20-23)
+    } else {
+      // Pressure-sensitive pad
+      int velocity = clamp (0, 127, int (z * 127.0));
+      sendCC((channel - 1), touchedButton + 20, velocity); // Send CC (24-35)
+    }
+  }
+}
+
+void touchMove (int touchIndex, float x, float y, float z, float vz)
+{
+  if (touchIndex == buttonTouchedIndex) {
+    int touchedButton = getTouchedButton(x, y);
+    if (touchedButton >= 4) {
+      // Pressure-sensitive pad
+      int velocity = clamp (0, 127, int (z * 127.0));
+      sendCC((channel - 1), touchedButton + 20, velocity); // Send CC (24-35)
+    }
+  }
+}
+
+void touchEnd (int touchIndex, float x, float y, float z, float vz)
+{
+  if (touchIndex == buttonTouchedIndex)
+  {
+    buttonTouchedIndex = 0;
+    int touchedButton = getTouchedButton(x, y);
+    if(touchedButton >= 4){
+        sendCC((channel - 1), touchedButton + 20, 0);
+    }
+  }
+}
+
+
+//==============================================================================
+void handleMIDI(int byte0, int byte1, int byte2) {
+  //mididebug1 = byte0;
+  //mididebug2 = byte1;
+  //mididebug3 = byte2;
+}
+
+void handleButtonDown (int index){
+}
+
+void handleButtonUp (int index){
+}
