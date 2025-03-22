@@ -17,8 +17,8 @@
 
 int buttonWidth, buttonSpacing;
 int gridSize, maxButtonIndex;
-int buttonTouchedIndex;
 int toggleStates[4]; // Array to store toggle states for the first column
+int touchedButtons[10]; //10は仮
 
 int touchdebug1, touchdebug2, touchdebug3;
 int mididebug1, mididebug2, mididebug3;
@@ -108,7 +108,6 @@ void initialise()
 {
   gridSize = 4;
   maxButtonIndex = gridSize * gridSize;
-  buttonTouchedIndex = 0;
 
   buttonWidth = 3; // 3x3 button size
   buttonSpacing = 1; // 1-dot spacing
@@ -138,42 +137,31 @@ void repaint()
 //==============================================================================
 void touchStart (int touchIndex, float x, float y, float z, float vz)
 {
-  int touchedButton = getTouchedButton(x, y);
-  if (touchedButton >= 0) {
-    buttonTouchedIndex = touchIndex;
-    if (touchedButton < 4) {
-      // Toggle button
-      toggleStates[touchedButton] = 1 - toggleStates[touchedButton]; // Toggle state
-      sendCC((channel - 1), touchedButton + 20, toggleStates[touchedButton] * 127); // Send CC (20-23)
-    } else {
-      // Pressure-sensitive pad
-      int velocity = clamp (0, 127, int (z * 127.0));
-      sendCC((channel - 1), touchedButton + 20, velocity); // Send CC (24-35)
-    }
+  touchedButtons[touchIndex] = getTouchedButton(x, y);
+  if (touchedButtons[touchIndex] < 4) {
+    // Toggle button
+    toggleStates[touchedButtons[touchIndex]] = 1 - toggleStates[touchedButtons[touchIndex]]; // Toggle state
+    sendCC((channel - 1), touchedButtons[touchIndex] + 20, toggleStates[touchedButtons[touchIndex]] * 127); // Send CC (20-23)
+  } else {
+    // Pressure-sensitive pad
+    int velocity = clamp (0, 127, int (z * 127.0));
+    sendCC((channel - 1), touchedButtons[touchIndex] + 20, velocity); // Send CC (24-35)
   }
 }
 
 void touchMove (int touchIndex, float x, float y, float z, float vz)
 {
-  if (touchIndex == buttonTouchedIndex) {
-    int touchedButton = getTouchedButton(x, y);
-    if (touchedButton >= 4) {
-      // Pressure-sensitive pad
-      int velocity = clamp (0, 127, int (z * 127.0));
-      sendCC((channel - 1), touchedButton + 20, velocity); // Send CC (24-35)
-    }
+  if (touchedButtons[touchIndex] >= 4) {
+    // Pressure-sensitive pad
+    int velocity = clamp (0, 127, int (z * 127.0));
+    sendCC((channel - 1), touchedButtons[touchIndex] + 20, velocity); // Send CC (24-35)
   }
 }
 
 void touchEnd (int touchIndex, float x, float y, float z, float vz)
 {
-  if (touchIndex == buttonTouchedIndex)
-  {
-    buttonTouchedIndex = 0;
-    int touchedButton = getTouchedButton(x, y);
-    if(touchedButton >= 4){
-        sendCC((channel - 1), touchedButton + 20, 0);
-    }
+  if(touchedButtons[touchIndex] >= 4){
+      sendCC((channel - 1), touchedButtons[touchIndex] + 20, 0);
   }
 }
 
