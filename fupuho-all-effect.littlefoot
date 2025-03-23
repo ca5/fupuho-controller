@@ -22,7 +22,7 @@ int selectedOption;
 int midiCcOffset;
 float cursorX, cursorY, cursorZ;
 bool isPad;
-
+bool settingButton;
 
 int touchdebug1, touchdebug2, touchdebug3;
 int mididebug1, mididebug2, mididebug3;
@@ -210,8 +210,12 @@ void touchStart (int touchIndex, float x, float y, float z, float vz)
   touchedFunctions[touchIndex] = getFunctionIndex(x, y);
   if (touchedFunctions[touchIndex] < maxToggleIndex) {
     // Toggle button
-    toggleStates[touchedFunctions[touchIndex]] = 1 - toggleStates[touchedFunctions[touchIndex]]; // Toggle state
-    sendCC((channel - 1), touchedFunctions[touchIndex] + midiCcOffset, toggleStates[touchedFunctions[touchIndex]] * 127); // Send CC (20-22)
+    if (settingButton){
+      sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + touchedFunctions[touchIndex] + 1, 127); // Send CC x,y,z
+    } else {
+      toggleStates[touchedFunctions[touchIndex]] = 1 - toggleStates[touchedFunctions[touchIndex]]; // Toggle state
+      sendCC((channel - 1), touchedFunctions[touchIndex] + midiCcOffset, toggleStates[touchedFunctions[touchIndex]] * 127); // Send CC (20-22)
+    }
   } else if (touchedFunctions[touchIndex] < maxButtonIndex) {
     // Select button
     selectedOption = touchedFunctions[touchIndex] - maxToggleIndex;
@@ -231,7 +235,9 @@ void touchStart (int touchIndex, float x, float y, float z, float vz)
 void touchMove (int touchIndex, float x, float y, float z, float vz)
 {
   touchedFunctions[touchIndex] = getFunctionIndex(x, y);
-  if (touchedFunctions[touchIndex] == maxButtonIndex) {
+  if (settingButton){
+    // Pad動かさない
+  } else if(touchedFunctions[touchIndex] == maxButtonIndex) {
     isPad = true;
     cursorX = x;
     cursorY = y;
@@ -262,9 +268,11 @@ void touchEnd (int touchIndex, float x, float y, float z, float vz)
   if(touchedFunctions[touchIndex] == maxButtonIndex){
     isPad = false;
     sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset, 0); // Send CC Pad On/Off
-    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 1, 127); // Send CC Pad x
-    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 2, 127); // Send CC Pad y
-    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 3, 0); // Send CC Pad z
+    if (!settingButton){
+      sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 1, 0); // Send CC Pad x
+      sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 2, 0); // Send CC Pad y
+      sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 3, 0); // Send CC Pad z
+    }
   }
 }
 
@@ -277,7 +285,9 @@ void handleMIDI(int byte0, int byte1, int byte2) {
 }
 
 void handleButtonDown (int index){
+  settingButton = true;
 }
 
 void handleButtonUp (int index){
+  settingButton = false;
 }
