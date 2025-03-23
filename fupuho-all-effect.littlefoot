@@ -245,13 +245,13 @@ void touchMove (int touchIndex, float x, float y, float z, float vz)
   
     // Pressure-sensitive pad
     int velocity = clamp (0, 127, int (z * 127.0));
-    int midiX = round(map(
+    int midiX = 127 - round(map(
               x,
               0.0,
               1.98 - map(float(buttonWidth), 0.0, 14.0, 0.0, 2.0),
               0.0,
               127.0));
-    int midiY = round(map(
+    int midiY = 127 - round(map(
               y,
               map(float(buttonWidth + 1), 0.0, 14.0, 0.0, 2.0),
               2.0,
