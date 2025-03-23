@@ -15,9 +15,11 @@
 </metadata>
 */
 int buttonWidth, buttonSpacing;
-int gridSize, maxButtonIndex;
+int gridSize, maxButtonIndex, maxToggleIndex;
 int toggleStates[16]; // Array to store toggle states for the first column
 int touchedFunctions[10]; //10は仮
+int selectedOption;
+int midiCcOffset;
 float cursorX, cursorY, cursorZ;
 bool isPad;
 
@@ -25,10 +27,21 @@ bool isPad;
 int touchdebug1, touchdebug2, touchdebug3;
 int mididebug1, mididebug2, mididebug3;
 
+int round (float num)
+{
+    int iNum = int (num);
+    float res = num - iNum;
+    
+    if (res > 0.5)
+        return iNum + 1;
+        
+    return iNum;
+}
+
 //==============================================================================
 int getButtonOnColour (int buttonIndex)
 {
-    if (buttonIndex < 3) {
+    if (buttonIndex < maxToggleIndex) {
         return 0xff00ff00; // Green
     } else {
         return 0xff0000ff; // Blue
@@ -37,10 +50,10 @@ int getButtonOnColour (int buttonIndex)
 
 int getButtonOffColour (int buttonIndex)
 {
-    if (buttonIndex < 3) {
+    if (buttonIndex < maxToggleIndex) {
         return 0xff808080; // Gray
     } else {
-        return 0xff808080; // Gray
+        return 0xff202020; // Gray
     }
 }
 
@@ -114,12 +127,16 @@ void drawButtons()
   for(int buttonIndex = 0; buttonIndex < maxButtonIndex; ++buttonIndex)
   {
     int colour;
-    if (buttonIndex < maxButtonIndex) {
+    if (buttonIndex < maxToggleIndex) {
       // Toggle buttons
       colour = toggleStates[buttonIndex] ? getButtonOnColour(buttonIndex) : getButtonOffColour(buttonIndex);
     } else {
-      // Pressure-sensitive pads
-      colour = getButtonOffColour(buttonIndex);
+      // Select Buttons
+      if (buttonIndex == selectedOption + maxToggleIndex){
+        colour = getButtonOnColour(buttonIndex);
+      }else{
+        colour = getButtonOffColour(buttonIndex);
+      }
     }
     drawButton (getButtonX(buttonIndex), getButtonY(buttonIndex), colour, toggleStates[buttonIndex]);
   }
@@ -145,7 +162,7 @@ void drawCursor (float x, float y, float z)
   blendCircle(colour,
               map(x, 0.0, 2.0, 0.0, 15.0) -0.5,
               map(y, 0.0, 2.0, 0.0, 15.0) -0.5,
-              z * 1.6,
+              z * 1.8,
               true);
 }
 
@@ -153,11 +170,13 @@ void drawCursor (float x, float y, float z)
 void initialise()
 {
   gridSize = 4;
+  maxToggleIndex = 3;
   maxButtonIndex = gridSize * 2 - 1;
   maxButtonIndex = 7;
   buttonWidth = 3; // 3x3 button size
   buttonSpacing = 1; // 1-dot spacing
   isPad = false;
+  midiCcOffset = 20;
 
   // Initialize toggle states to off
   for (int i = 0; i < maxButtonIndex; ++i) {
@@ -189,15 +208,23 @@ void repaint()
 void touchStart (int touchIndex, float x, float y, float z, float vz)
 {
   touchedFunctions[touchIndex] = getFunctionIndex(x, y);
-  if (touchedFunctions[touchIndex] < maxButtonIndex) {
-    
+  if (touchedFunctions[touchIndex] < maxToggleIndex) {
     // Toggle button
     toggleStates[touchedFunctions[touchIndex]] = 1 - toggleStates[touchedFunctions[touchIndex]]; // Toggle state
-    sendCC((channel - 1), touchedFunctions[touchIndex] + 20, toggleStates[touchedFunctions[touchIndex]] * 127); // Send CC (20-23)
+    sendCC((channel - 1), touchedFunctions[touchIndex] + midiCcOffset, toggleStates[touchedFunctions[touchIndex]] * 127); // Send CC (20-22)
+  } else if (touchedFunctions[touchIndex] < maxButtonIndex) {
+    // Select button
+    selectedOption = touchedFunctions[touchIndex] - maxToggleIndex;
+    for (int i = 0; i < maxButtonIndex - maxToggleIndex; ++i) {
+      if (i == selectedOption) {
+        sendCC((channel - 1), i + maxToggleIndex + midiCcOffset, 127); // Send CC (23-26)
+      } else {
+        sendCC((channel - 1), i + maxToggleIndex + midiCcOffset, 0); // Send CC (20-26)
+      }
+    }
   } else {
-    // Pressure-sensitive pad
-    int velocity = clamp (0, 127, int (z * 127.0));
-    sendCC((channel - 1), touchedFunctions[touchIndex] + 20, velocity); // Send CC (24-35)
+    // Pad
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset, 127); // Send CC Pad On/Off
   }
 }
 
@@ -212,7 +239,21 @@ void touchMove (int touchIndex, float x, float y, float z, float vz)
   
     // Pressure-sensitive pad
     int velocity = clamp (0, 127, int (z * 127.0));
-    sendCC((channel - 1), touchedFunctions[touchIndex] + 20, velocity); // Send CC (24-35)
+    int midiX = round(map(
+              x,
+              0.0,
+              1.98 - map(float(buttonWidth), 0.0, 14.0, 0.0, 2.0),
+              0.0,
+              127.0));
+    int midiY = round(map(
+              y,
+              map(float(buttonWidth + 1), 0.0, 14.0, 0.0, 2.0),
+              2.0,
+              0.0,
+              127.0));
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 1, midiX); // Send CC Pad x
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 2, midiY); // Send CC Pad y
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 3, velocity); // Send CC Pad z
   }
 }
 
@@ -220,7 +261,10 @@ void touchEnd (int touchIndex, float x, float y, float z, float vz)
 {
   if(touchedFunctions[touchIndex] == maxButtonIndex){
     isPad = false;
-    sendCC((channel - 1), touchedFunctions[touchIndex] + 20, 0);
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset, 0); // Send CC Pad On/Off
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 1, 127); // Send CC Pad x
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 2, 127); // Send CC Pad y
+    sendCC((channel - 1), selectedOption * 4 + maxButtonIndex + midiCcOffset + 3, 0); // Send CC Pad z
   }
 }
 
